@@ -18,6 +18,7 @@ export type DigestRow = {
 export type NightDigest = {
   rows: DigestRow[];
   badLines: number;
+  counts: { ok: number; retry: number; fail: number };
 };
 
 type Event = {
@@ -57,6 +58,7 @@ export function readNight(runsDir: string, night: string): NightDigest {
   const text = readFileSync(join(runsDir, `${night}.jsonl`), 'utf8');
   const events: Event[] = [];
   let badLines = 0;
+  const counts = { ok: 0, retry: 0, fail: 0 };
   for (const line of text.split('\n')) {
     if (line.trim() === '') continue;
     const event = parseLine(line);
@@ -64,6 +66,7 @@ export function readNight(runsDir: string, night: string): NightDigest {
       badLines += 1;
       continue;
     }
+    counts[event.status] += 1;
     events.push(event);
   }
 
@@ -91,5 +94,18 @@ export function readNight(runsDir: string, night: string): NightDigest {
     })
     .sort((a, b) => a.job.localeCompare(b.job));
 
-  return { rows, badLines };
+  return { rows, badLines, counts };
+}
+
+const NIGHT = /^\d{4}-\d{2}-\d{2}$/;
+
+// Missing night is undefined so the route can answer 404. Any other read error still throws.
+export function openNight(runsDir: string, night: string): NightDigest | undefined {
+  if (!NIGHT.test(night)) return undefined;
+  try {
+    return readNight(runsDir, night);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+    throw error;
+  }
 }
